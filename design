@@ -1,0 +1,7 @@
+前端：Next.js 14 + TypeScript + Tailwind + shadcn/ui
+后端：Python FastAPI + LangChain
+数据库：PostgreSQL + pgvector
+AI：LangChain → OpenAI/Claude（可切换）
+信息源：RSS + RSSHub
+认证：邮箱 + 密码 + JWT
+部署：阿里云 + Docker Compose + Nginx
