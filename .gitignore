@@ -214,5 +214,47 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# ── Node.js / Next.js ─────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Env (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Runtime cache + summaries (per-article summary outputs, live trend cache)
+mvp-app/public/summaries/
+mvp-app/public/articles-cache.json
+
+# Log files
+*.log
+dev-server.log
+dev-server.err.log
+prod-server.log
+prod-server.err.log
+
+# TypeScript build cache
+*.tsbuildinfo
+next-env.d.ts
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Vercel / Turborepo
+.vercel/
+.turbo/
+
+# Outer API key file (referenced by mvp-app via absolute path at runtime)
+api key.json
+
 # Streamlit
 .streamlit/secrets.toml
