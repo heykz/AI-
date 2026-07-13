@@ -21,6 +21,9 @@ const sourceMeta: Record<string, { label: string; mark: string; color: string }>
   huxiu: { label: "虎嗅", mark: "虎", color: "#c6a2ff" },
 };
 
+const chatHistory = ["企业数字化转型方向", "如何评估AI工具ROI", "竞争对手分析框架", "融资策略与时机选择"];
+const newsHistory = ["OpenAI发布GPT-5 Turbo", "A股沪深300突破4200点", "数字经济促进条例解读", "鸿蒙生态10万应用"];
+
 export function BossUpApp() {
   const [view, setView] = useState<"chat" | "news">("chat");
   const [articles, setArticles] = useState<Article[]>(demoArticles);
@@ -63,11 +66,11 @@ function Sidebar({ view, onView }: { view: "chat" | "news"; onView: (v: "chat" |
     <aside className="sidebar">
       <div className="brand"><DolphinMark /><div><strong>海豚企策</strong><small>DOLPHIN INTEL</small></div></div>
       <nav>
-        <button className={view === "chat" ? "nav-active" : ""} onClick={() => onView("chat")}><MessageSquare size={15} />AI 助手</button>
         <button className={view === "news" ? "nav-active" : ""} onClick={() => onView("news")}><Newspaper size={15} />聚合</button>
+        <button className={view === "chat" ? "nav-active" : ""} onClick={() => onView("chat")}><MessageSquare size={15} />AI 助手</button>
       </nav>
-      <section className="history"><p>历史记录</p>{["企业数字化转型方向", "如何评估 AI 工具 ROI", "竞争对手分析框架"].map((x) => <button key={x}>{x}</button>)}</section>
-      <div className="account"><span>王</span><div><strong>王总</strong><small>已配置企业画像</small></div></div>
+      <section className="history"><p>历史记录</p>{(view === "chat" ? chatHistory : newsHistory).map((x) => <button key={x}><MessageSquare size={11} /><span>{x}</span></button>)}</section>
+      <div className="account"><span><User size={13} /></span><div><strong>企业用户</strong><small>已配置企业画像</small></div></div>
     </aside>
   );
 }
@@ -121,24 +124,36 @@ function ChatHome({ articles, onArticle, onProfile }: { articles: Article[]; onA
 }
 
 function NewsView({ articles, onArticles, onArticle }: { articles: Article[]; onArticles: (a: Article[]) => void; onArticle: (a: Article) => void }) {
-  const [query, setQuery] = useState(""); const [loading, setLoading] = useState(false);
-  const refresh = async () => { setLoading(true); try { const r = await fetch("/api/articles/refresh", { method: "POST" }); if (r.ok) { const d = await r.json() as FetchResult; onArticles(d.articles); } } finally { setLoading(false); } };
+  const [query, setQuery] = useState(""); const [refreshing, setRefreshing] = useState<string | null>(null);
+  const refresh = async (sourceId: string) => { setRefreshing(sourceId); try { const r = await fetch("/api/articles/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sourceId }) }); if (r.ok) { const d = await r.json() as FetchResult; onArticles(d.articles); } } finally { window.setTimeout(() => setRefreshing(null), 500); } };
   const grouped = useMemo(() => {
-    const map = new Map<string, Article[]>(); articles.filter((a) => `${a.title}${a.summary}${a.sourceName}`.toLowerCase().includes(query.toLowerCase())).forEach((a) => map.set(a.sourceId, [...(map.get(a.sourceId) || []), a])); return [...map.entries()];
-  }, [articles, query]);
+    const map = new Map<string, Article[]>(); articles.forEach((a) => map.set(a.sourceId, [...(map.get(a.sourceId) || []), a])); return [...map.entries()];
+  }, [articles]);
   return (
-    <section className="news-view ocean"><div className="news-top"><div className="news-title"><DolphinMark /><strong>海豚企策</strong></div><div className="search"><Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索资讯、信源、关键词..." /></div><button className="refresh-all" onClick={refresh} aria-label="刷新资讯"><RefreshCw size={16} className={loading ? "spin" : ""} /></button></div>
-      <div className="source-grid">{grouped.map(([id, list]) => { const meta = sourceMeta[id] || { label: list[0]?.sourceName || id, mark: (list[0]?.sourceName || id)[0], color: "#4dd9e8" }; return <article className="source-panel" key={id}><header><span style={{ color: meta.color, borderColor: `${meta.color}55` }}>{meta.mark}</span><strong>{meta.label}</strong></header>{list.slice(0, 6).map((a) => <button key={a.id} onClick={() => onArticle(a)}><span>{a.title}</span><small>{a.publishedAt ? new Date(a.publishedAt).toLocaleDateString("zh-CN") : "刚刚"}</small></button>)}</article>; })}</div>
+    <section className="news-view ocean"><div className="news-top"><div className="news-title"><DolphinMark /><strong>海豚企策</strong></div><div className="search"><Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索资讯、信源、关键词..." /></div></div>
+      <div className="source-grid">{grouped.map(([id, list]) => { const meta = sourceMeta[id] || { label: list[0]?.sourceName || id, mark: (list[0]?.sourceName || id)[0], color: "#4dd9e8" }; const filtered = list.filter((a) => `${a.title}${a.summary}${a.sourceName}`.toLowerCase().includes(query.toLowerCase())); return <article className="source-panel" key={id}><header><div><span style={{ color: meta.color, borderColor: `${meta.color}55` }}>{meta.mark}</span><strong>{meta.label}</strong></div><button onClick={() => refresh(id)} aria-label={`刷新${meta.label}`}><RefreshCw size={13} className={refreshing === id ? "spin" : ""} /></button></header>{filtered.length ? filtered.slice(0, 6).map((a) => <button key={a.id} onClick={() => onArticle(a)}><span>{a.title}</span><small>{a.publishedAt ? new Date(a.publishedAt).toLocaleDateString("zh-CN") : "刚刚"}</small></button>) : <p className="no-news">暂无匹配资讯</p>}</article>; })}</div>
     </section>
   );
 }
 
 function ArticleModal({ article, onClose }: { article: Article; onClose: () => void }) {
   const [summary, setSummary] = useState<SummaryResult | null>(null); const [loading, setLoading] = useState(true);
+  const [question, setQuestion] = useState(""); const [asking, setAsking] = useState(false);
+  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([{ role: "assistant", text: "已读取文章内容，结合您的企业画像，我可以帮您分析此事件对贵司的影响。请问您最关心哪个维度？" }]);
   useEffect(() => { fetch(`/api/articles/${encodeURIComponent(article.id)}/summarize`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ article }) }).then((r) => r.ok ? r.json() : null).then(setSummary).finally(() => setLoading(false)); }, [article]);
-  return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><div className="article-modal"><section className="article-copy"><button className="article-close" onClick={onClose} aria-label="关闭文章"><X size={17} /></button><div className="article-meta"><span>{article.sourceName}</span><small>{article.publishedAt ? new Date(article.publishedAt).toLocaleDateString("zh-CN") : "最新资讯"}</small></div><h2>{article.title}</h2><p>{article.summary || "该信源暂未提供摘要，请打开原文查看完整内容。"}</p>{article.url !== "#" && <a href={article.url} target="_blank" rel="noreferrer">查看原文 <ExternalLink size={13} /></a>}</section><aside className="ai-panel"><header><div><Bot size={14} /><strong>AI 分析</strong></div><button onClick={onClose} aria-label="关闭"><X size={16} /></button></header>{loading ? <div className="ai-loading"><Loader2 className="spin" />正在分析文章...</div> : <><div className="summary-block"><label><Sparkles size={12} />AI 总结</label><p>{summary?.one_sentence || "暂时无法生成总结。"}</p></div><div className="summary-block"><label>企业洞察</label><p>{summary?.why_it_matters}</p>{summary?.key_points?.map((p) => <div className="point" key={p}>{p}</div>)}</div></>}</aside></div></div>;
+  const ask = async () => {
+    const text = question.trim(); if (!text || asking) return;
+    setMessages((items) => [...items, { role: "user", text }]); setQuestion(""); setAsking(true);
+    try {
+      const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "article", message: text, article }) });
+      const data = response.ok ? await response.json() : null;
+      setMessages((items) => [...items, { role: "assistant", text: data?.content || "文章问答服务暂时没有响应，请稍后再试。" }]);
+    } catch { setMessages((items) => [...items, { role: "assistant", text: "暂时无法连接文章问答服务。" }]); }
+    finally { setAsking(false); }
+  };
+  return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><div className="article-modal"><section className="article-copy"><button className="article-close" onClick={onClose} aria-label="关闭文章"><X size={17} /></button><div className="article-meta"><span>{article.sourceName}</span><small>{article.publishedAt ? new Date(article.publishedAt).toLocaleDateString("zh-CN") : "最新资讯"}</small></div><h2>{article.title}</h2><p>{article.summary || "该信源暂未提供摘要，请打开原文查看完整内容。"}</p>{article.url !== "#" && <a href={article.url} target="_blank" rel="noreferrer">查看原文 <ExternalLink size={13} /></a>}</section><aside className="ai-panel"><header><div><Bot size={14} /><strong>AI 分析</strong></div><button onClick={onClose} aria-label="关闭"><X size={16} /></button></header>{loading ? <div className="ai-loading"><Loader2 className="spin" />正在分析文章...</div> : <><div className="summary-block"><label><Sparkles size={12} />AI 总结</label><p>{summary?.one_sentence || "暂时无法生成总结。"}</p></div><div className="summary-block"><label>企业洞察</label><p>{summary?.why_it_matters}</p>{summary?.key_points?.map((p) => <div className="point" key={p}>{p}</div>)}</div></>}<div className="article-chat"><div className="article-chat-messages">{messages.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}><span>{message.text}</span></div>)}{asking && <Loader2 size={13} className="spin" />}</div><div className="article-chat-input"><input value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") ask(); }} placeholder="针对文章提问..." /><button onClick={ask} aria-label="发送文章问题"><Send size={13} /></button></div></div></aside></div></div>;
 }
 
 function ProfileModal({ onClose }: { onClose: () => void }) {
-  return <div className="modal-backdrop"><form className="profile-modal" onSubmit={(e) => { e.preventDefault(); onClose(); }}><header><div><Building2 size={16} /><strong>企业画像配置</strong></div><button type="button" onClick={onClose}><X size={16} /></button></header>{[["企业名称", "例：海豚科技有限公司"], ["所属行业", "例：人工智能 / SaaS / 新能源"], ["企业规模", "例：100-500 人"], ["核心产品/服务", "简要描述主营业务"], ["当前核心挑战", "描述企业目前最关注的问题"]].map(([l, p]) => <label key={l}>{l}<input placeholder={p} /></label>)}<button className="save-profile">保存企业画像</button></form></div>;
+  return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><form className="profile-modal" onSubmit={(e) => { e.preventDefault(); onClose(); }}><header><div><Building2 size={16} /><strong>企业画像配置</strong></div><button type="button" onClick={onClose}><X size={16} /></button></header>{[["企业名称", "例：海豚科技有限公司"], ["所属行业", "例：人工智能 / SaaS / 新能源"], ["企业规模", "例：100-500 人"], ["核心产品/服务", "简要描述主营业务"], ["当前核心挑战", "描述企业目前最关注的问题"]].map(([l, p]) => <label key={l}>{l}<input placeholder={p} /></label>)}<button className="save-profile">保存企业画像</button></form></div>;
 }

@@ -175,5 +175,6 @@ __marimo__/
 node_modules/
 .next/
 .env.local
+*.tsbuildinfo
 *.log
 .DS_Store
