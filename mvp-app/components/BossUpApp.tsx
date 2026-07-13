@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Bot, Building2, ExternalLink, Loader2, MessageSquare, Newspaper,
+  Bot, Building2, ExternalLink, History, Loader2, MessageSquare, Newspaper,
   RefreshCw, Search, Send, Sparkles, User, X,
 } from "lucide-react";
 import type { Article, FetchResult, SummaryResult } from "@/lib/types";
@@ -21,14 +21,24 @@ const sourceMeta: Record<string, { label: string; mark: string; color: string }>
   huxiu: { label: "虎嗅", mark: "虎", color: "#c6a2ff" },
 };
 
-const chatHistory = ["企业数字化转型方向", "如何评估AI工具ROI", "竞争对手分析框架", "融资策略与时机选择"];
-const newsHistory = ["OpenAI发布GPT-5 Turbo", "A股沪深300突破4200点", "数字经济促进条例解读", "鸿蒙生态10万应用"];
+type ChatMessage = { role: "user" | "assistant"; text: string };
+type ChatSession = { id: string; title: string; messages: ChatMessage[] };
+
+const initialChatSessions: ChatSession[] = [
+  { id: "digital-transformation", title: "企业数字化转型方向", messages: [{ role: "user", text: "传统企业数字化转型应该先从哪里开始？" }, { role: "assistant", text: "建议先梳理高频、重复且可量化的业务流程，再从一个能在三个月内验证收益的小场景切入。" }] },
+  { id: "ai-roi", title: "如何评估AI工具ROI", messages: [{ role: "user", text: "如何评估 AI 工具 ROI？" }, { role: "assistant", text: "可以同时记录节省工时、错误率变化、业务增量和持续使用成本，并设置上线前后的对照基线。" }] },
+  { id: "competitor-analysis", title: "竞争对手分析框架", messages: [{ role: "user", text: "帮我整理一个竞争对手分析框架。" }, { role: "assistant", text: "可以从目标客户、核心产品、定价、获客渠道、交付能力和近期战略动作六个维度建立对比表。" }] },
+  { id: "financing-strategy", title: "融资策略与时机选择", messages: [{ role: "user", text: "什么时候适合启动新一轮融资？" }, { role: "assistant", text: "通常在关键指标持续改善、资金仍有充足安全垫且下一阶段增长路径清晰时启动更主动。" }] },
+];
 
 export function BossUpApp() {
   const [view, setView] = useState<"chat" | "news">("chat");
   const [articles, setArticles] = useState<Article[]>(demoArticles);
   const [selected, setSelected] = useState<Article | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>(initialChatSessions);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [articleHistory, setArticleHistory] = useState<Article[]>(demoArticles);
 
   useEffect(() => {
     fetch("/api/articles")
@@ -37,14 +47,32 @@ export function BossUpApp() {
       .catch(() => undefined);
   }, []);
 
+  const openArticle = (article: Article) => {
+    setSelected(article);
+    setArticleHistory((items) => [article, ...items.filter((item) => item.id !== article.id)].slice(0, 8));
+  };
+  const appendChatMessage = (sessionId: string | null, message: ChatMessage, titleHint?: string) => {
+    const id = sessionId || `chat-${Date.now()}`;
+    setChatSessions((items) => {
+      const existing = items.find((item) => item.id === id);
+      const updated: ChatSession = existing
+        ? { ...existing, messages: [...existing.messages, message] }
+        : { id, title: titleHint?.slice(0, 18) || "新对话", messages: [message] };
+      return [updated, ...items.filter((item) => item.id !== id)].slice(0, 12);
+    });
+    setActiveChatId(id);
+    return id;
+  };
+  const activeChat = chatSessions.find((item) => item.id === activeChatId) || null;
+
   return (
     <div className="app-shell">
-      <Sidebar view={view} onView={setView} />
+      <Sidebar view={view} onView={setView} chatSessions={chatSessions} activeChatId={activeChatId} articleHistory={articleHistory} onChatHistory={(id) => { setActiveChatId(id); setView("chat"); }} onArticleHistory={(article) => { setView("news"); openArticle(article); }} />
       <main className="main-stage">
         {view === "chat" ? (
-          <ChatHome articles={articles} onArticle={setSelected} onProfile={() => setProfileOpen(true)} />
+          <ChatHome articles={articles} session={activeChat} onAppendMessage={appendChatMessage} onArticle={openArticle} onProfile={() => setProfileOpen(true)} />
         ) : (
-          <NewsView articles={articles} onArticles={setArticles} onArticle={setSelected} />
+          <NewsView articles={articles} onArticles={setArticles} onArticle={openArticle} />
         )}
       </main>
       {selected && <ArticleModal article={selected} onClose={() => setSelected(null)} />}
@@ -61,7 +89,7 @@ function DolphinMark({ large = false }: { large?: boolean }) {
   );
 }
 
-function Sidebar({ view, onView }: { view: "chat" | "news"; onView: (v: "chat" | "news") => void }) {
+function Sidebar({ view, onView, chatSessions, activeChatId, articleHistory, onChatHistory, onArticleHistory }: { view: "chat" | "news"; onView: (v: "chat" | "news") => void; chatSessions: ChatSession[]; activeChatId: string | null; articleHistory: Article[]; onChatHistory: (id: string) => void; onArticleHistory: (article: Article) => void }) {
   return (
     <aside className="sidebar">
       <div className="brand"><DolphinMark /><div><strong>海豚企策</strong><small>DOLPHIN INTEL</small></div></div>
@@ -69,24 +97,25 @@ function Sidebar({ view, onView }: { view: "chat" | "news"; onView: (v: "chat" |
         <button className={view === "news" ? "nav-active" : ""} onClick={() => onView("news")}><Newspaper size={15} />聚合</button>
         <button className={view === "chat" ? "nav-active" : ""} onClick={() => onView("chat")}><MessageSquare size={15} />AI 助手</button>
       </nav>
-      <section className="history"><p>历史记录</p>{(view === "chat" ? chatHistory : newsHistory).map((x) => <button key={x}><MessageSquare size={11} /><span>{x}</span></button>)}</section>
+      <section className="history"><p>历史记录</p>{view === "chat" ? chatSessions.slice(0, 8).map((session) => <button className={activeChatId === session.id ? "history-active" : ""} key={session.id} onClick={() => onChatHistory(session.id)}><MessageSquare size={11} /><span>{session.title}</span></button>) : articleHistory.slice(0, 8).map((article) => <button key={article.id} onClick={() => onArticleHistory(article)}><History size={12} /><span>{article.title}</span></button>)}</section>
       <div className="account"><span><User size={13} /></span><div><strong>企业用户</strong><small>已配置企业画像</small></div></div>
     </aside>
   );
 }
 
-function ChatHome({ articles, onArticle, onProfile }: { articles: Article[]; onArticle: (a: Article) => void; onProfile: () => void }) {
+function ChatHome({ articles, session, onAppendMessage, onArticle, onProfile }: { articles: Article[]; session: ChatSession | null; onAppendMessage: (sessionId: string | null, message: ChatMessage, titleHint?: string) => string; onArticle: (a: Article) => void; onProfile: () => void }) {
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
   const [busy, setBusy] = useState(false);
+  const messages = session?.messages || [];
   const send = async () => {
     const text = input.trim(); if (!text || busy) return;
-    setMessages((m) => [...m, { role: "user", text }]); setInput(""); setBusy(true);
+    const context = [...messages, { role: "user" as const, text }];
+    const sessionId = onAppendMessage(session?.id || null, { role: "user", text }, text); setInput(""); setBusy(true);
     try {
-      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "feed", message: text, articles: articles.slice(0, 20) }) });
+      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "feed", message: text, history: context, articles: articles.slice(0, 20) }) });
       const data = r.ok ? await r.json() : null;
-      setMessages((m) => [...m, { role: "assistant", text: data?.content || "服务暂时没有响应，请稍后再试。" }]);
-    } catch { setMessages((m) => [...m, { role: "assistant", text: "暂时无法连接 AI 服务。" }]); }
+      onAppendMessage(sessionId, { role: "assistant", text: data?.content || "服务暂时没有响应，请稍后再试。" });
+    } catch { onAppendMessage(sessionId, { role: "assistant", text: "暂时无法连接 AI 服务。" }); }
     finally { setBusy(false); }
   };
   return (
@@ -112,7 +141,7 @@ function ChatHome({ articles, onArticle, onProfile }: { articles: Article[]; onA
         <DolphinMark large />
         <h1>海豚企策</h1>
         <p>潜入行业资讯深处，把 AI 趋势翻译成老板下一步</p>
-        {messages.length > 0 && <div className="mini-chat">{messages.slice(-3).map((m, i) => <div key={i} className={m.role}>{m.text}</div>)}{busy && <Loader2 size={15} className="spin" />}</div>}
+        {messages.length > 0 && <div className="mini-chat">{messages.map((m, i) => <div key={`${m.role}-${i}`} className={m.role}>{m.text}</div>)}{busy && <Loader2 size={15} className="spin" />}</div>}
         <div className="prompt-box">
           <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="描述你的企业目前遇到的困惑，助手将为你解答..." />
           <div><button className="profile-button" onClick={onProfile}><Building2 size={13} />企业画像</button><button className="send-button" onClick={send}><Send size={13} />发送</button></div>
