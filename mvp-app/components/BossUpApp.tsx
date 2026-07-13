@@ -30,6 +30,7 @@ const initialChatSessions: ChatSession[] = [
   { id: "competitor-analysis", title: "竞争对手分析框架", messages: [{ role: "user", text: "帮我整理一个竞争对手分析框架。" }, { role: "assistant", text: "可以从目标客户、核心产品、定价、获客渠道、交付能力和近期战略动作六个维度建立对比表。" }] },
   { id: "financing-strategy", title: "融资策略与时机选择", messages: [{ role: "user", text: "什么时候适合启动新一轮融资？" }, { role: "assistant", text: "通常在关键指标持续改善、资金仍有充足安全垫且下一阶段增长路径清晰时启动更主动。" }] },
 ];
+const historyStorageKey = "ai-bossup-history-v1";
 
 export function BossUpApp() {
   const [view, setView] = useState<"chat" | "news">("chat");
@@ -39,6 +40,7 @@ export function BossUpApp() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>(initialChatSessions);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [articleHistory, setArticleHistory] = useState<Article[]>(demoArticles);
+  const [historyReady, setHistoryReady] = useState(false);
 
   useEffect(() => {
     fetch("/api/articles")
@@ -46,6 +48,22 @@ export function BossUpApp() {
       .then((data) => data?.articles?.length && setArticles(data.articles))
       .catch(() => undefined);
   }, []);
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(historyStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as { chatSessions?: ChatSession[]; activeChatId?: string | null; articleHistory?: Article[] };
+        if (parsed.chatSessions?.length) setChatSessions(parsed.chatSessions);
+        if (parsed.articleHistory?.length) setArticleHistory(parsed.articleHistory);
+        setActiveChatId(parsed.activeChatId || null);
+      }
+    } catch { /* Ignore invalid local history and keep the built-in examples. */ }
+    finally { setHistoryReady(true); }
+  }, []);
+  useEffect(() => {
+    if (!historyReady) return;
+    window.localStorage.setItem(historyStorageKey, JSON.stringify({ chatSessions, activeChatId, articleHistory }));
+  }, [activeChatId, articleHistory, chatSessions, historyReady]);
 
   const openArticle = (article: Article) => {
     setSelected(article);
