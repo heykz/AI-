@@ -41,6 +41,7 @@ export function BossUpApp() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [articleHistory, setArticleHistory] = useState<Article[]>(demoArticles);
   const [historyReady, setHistoryReady] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<"history" | "user" | null>(null);
 
   useEffect(() => {
     fetch("/api/articles")
@@ -85,7 +86,7 @@ export function BossUpApp() {
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} onView={setView} chatSessions={chatSessions} activeChatId={activeChatId} articleHistory={articleHistory} onChatHistory={(id) => { setActiveChatId(id); setView("chat"); }} onArticleHistory={(article) => { setView("news"); openArticle(article); }} />
+      <Sidebar view={view} onView={(next) => { setView(next); if (next === "chat") setActiveChatId(null); }} onMobilePanel={setMobilePanel} chatSessions={chatSessions} activeChatId={activeChatId} articleHistory={articleHistory} onChatHistory={(id) => { setActiveChatId(id); setView("chat"); }} onArticleHistory={(article) => { setView("news"); openArticle(article); }} />
       <main className="main-stage">
         {view === "chat" ? (
           <ChatHome articles={articles} session={activeChat} onAppendMessage={appendChatMessage} onArticle={openArticle} onProfile={() => setProfileOpen(true)} />
@@ -93,6 +94,8 @@ export function BossUpApp() {
           <NewsView articles={articles} onArticles={setArticles} onArticle={openArticle} />
         )}
       </main>
+      {mobilePanel === "history" && <MobileHistoryPanel view={view} chatSessions={chatSessions} articleHistory={articleHistory} onClose={() => setMobilePanel(null)} onChatHistory={(id) => { setActiveChatId(id); setView("chat"); setMobilePanel(null); }} onArticleHistory={(article) => { setView("news"); openArticle(article); setMobilePanel(null); }} />}
+      {mobilePanel === "user" && <MobileUserPanel onClose={() => setMobilePanel(null)} onProfile={() => { setMobilePanel(null); setProfileOpen(true); }} />}
       {selected && <ArticleModal article={selected} onClose={() => setSelected(null)} />}
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </div>
@@ -107,7 +110,7 @@ function DolphinMark({ large = false }: { large?: boolean }) {
   );
 }
 
-function Sidebar({ view, onView, chatSessions, activeChatId, articleHistory, onChatHistory, onArticleHistory }: { view: "chat" | "news"; onView: (v: "chat" | "news") => void; chatSessions: ChatSession[]; activeChatId: string | null; articleHistory: Article[]; onChatHistory: (id: string) => void; onArticleHistory: (article: Article) => void }) {
+function Sidebar({ view, onView, onMobilePanel, chatSessions, activeChatId, articleHistory, onChatHistory, onArticleHistory }: { view: "chat" | "news"; onView: (v: "chat" | "news") => void; onMobilePanel: (panel: "history" | "user") => void; chatSessions: ChatSession[]; activeChatId: string | null; articleHistory: Article[]; onChatHistory: (id: string) => void; onArticleHistory: (article: Article) => void }) {
   return (
     <aside className="sidebar">
       <div className="brand"><DolphinMark /><div><strong>海豚企策</strong><small>DOLPHIN INTEL</small></div></div>
@@ -115,6 +118,7 @@ function Sidebar({ view, onView, chatSessions, activeChatId, articleHistory, onC
         <button className={view === "news" ? "nav-active" : ""} onClick={() => onView("news")}><Newspaper size={15} />聚合</button>
         <button className={view === "chat" ? "nav-active" : ""} onClick={() => onView("chat")}><MessageSquare size={15} />AI 助手</button>
       </nav>
+      <div className="mobile-tools"><button onClick={() => onMobilePanel("history")} aria-label="历史记录"><History size={16} /><span>历史</span></button><button onClick={() => onMobilePanel("user")} aria-label="用户中心"><User size={16} /><span>我的</span></button></div>
       <section className="history"><p>历史记录</p>{view === "chat" ? chatSessions.slice(0, 8).map((session) => <button className={activeChatId === session.id ? "history-active" : ""} key={session.id} onClick={() => onChatHistory(session.id)}><MessageSquare size={11} /><span>{session.title}</span></button>) : articleHistory.slice(0, 8).map((article) => <button key={article.id} onClick={() => onArticleHistory(article)}><History size={12} /><span>{article.title}</span></button>)}</section>
       <div className="account"><span><User size={13} /></span><div><strong>企业用户</strong><small>已配置企业画像</small></div></div>
     </aside>
@@ -137,7 +141,7 @@ function ChatHome({ articles, session, onAppendMessage, onArticle, onProfile }: 
     finally { setBusy(false); }
   };
   return (
-    <section className="chat-home ocean">
+    <section className={`chat-home ocean${messages.length ? " has-conversation" : ""}`}>
       <div className="light-rays" />
       <div className="sea-floor" aria-hidden="true">
         <span className="seaweed seaweed-a" />
@@ -168,6 +172,14 @@ function ChatHome({ articles, session, onAppendMessage, onArticle, onProfile }: 
       </div>
     </section>
   );
+}
+
+function MobileHistoryPanel({ view, chatSessions, articleHistory, onClose, onChatHistory, onArticleHistory }: { view: "chat" | "news"; chatSessions: ChatSession[]; articleHistory: Article[]; onClose: () => void; onChatHistory: (id: string) => void; onArticleHistory: (article: Article) => void }) {
+  return <div className="mobile-sheet-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="mobile-sheet"><header><div><History size={16} /><strong>{view === "chat" ? "历史对话" : "浏览历史"}</strong></div><button onClick={onClose} aria-label="关闭历史记录"><X size={16} /></button></header><div className="mobile-history-list">{view === "chat" ? chatSessions.map((session) => <button key={session.id} onClick={() => onChatHistory(session.id)}><MessageSquare size={14} /><span><strong>{session.title}</strong><small>{session.messages.at(-1)?.text}</small></span></button>) : articleHistory.map((article) => <button key={article.id} onClick={() => onArticleHistory(article)}><History size={14} /><span><strong>{article.title}</strong><small>{article.sourceName}</small></span></button>)}</div></section></div>;
+}
+
+function MobileUserPanel({ onClose, onProfile }: { onClose: () => void; onProfile: () => void }) {
+  return <div className="mobile-sheet-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="mobile-sheet mobile-user-sheet"><header><div><User size={16} /><strong>用户中心</strong></div><button onClick={onClose} aria-label="关闭用户中心"><X size={16} /></button></header><div className="mobile-user-summary"><span><User size={18} /></span><div><strong>企业用户</strong><small>已配置企业画像</small></div></div><button className="mobile-profile-action" onClick={onProfile}><Building2 size={15} />编辑企业画像</button></section></div>;
 }
 
 function NewsView({ articles, onArticles, onArticle }: { articles: Article[]; onArticles: (a: Article[]) => void; onArticle: (a: Article) => void }) {
